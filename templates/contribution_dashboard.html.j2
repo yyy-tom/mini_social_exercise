@@ -1,0 +1,78 @@
+{# Assignment 1: visible opportunities, goal feedback, and community reciprocity. #}
+<section class="col-md-8 mx-auto mb-4 community-corner" id="community-corner" aria-labelledby="community-title">
+  <h2 id="community-title">Your community corner</h2>
+  <p class="text-muted">Small replies keep the conversation going.</p>
+
+  <div class="row g-3 mb-3">
+    <div class="col-lg-6">
+      <section class="card h-100" aria-labelledby="weekly-goal-title">
+        <div class="card-body">
+          <h3 class="h5" id="weekly-goal-title">Your weekly goal</h3>
+          <p class="small text-muted mb-2">
+            {{ community.week.start.strftime('%d %b') }}–{{ community.week.last_day.strftime('%d %b %Y') }} · Helsinki time
+          </p>
+          <p>Comment on 3 different posts by other people this week.</p>
+          <p class="mb-2"><strong>{{ community.goal.display_completed }} / {{ community.goal.target }} posts</strong></p>
+          <div class="progress mb-2" role="progressbar" aria-label="Weekly contribution goal"
+               aria-valuenow="{{ community.goal.display_completed }}" aria-valuemin="0" aria-valuemax="{{ community.goal.target }}"
+               aria-valuetext="{{ community.goal.display_completed }} of {{ community.goal.target }} posts">
+            <div class="progress-bar{% if community.goal.achieved %} bg-success{% endif %}" style="width: {{ community.goal.percent }}%;"></div>
+          </div>
+          {% if community.goal.achieved %}
+          <p class="text-success mb-0">Goal complete! Thanks for joining the conversation.</p>
+          {% else %}
+          <p class="small text-muted mb-0">Each post counts once. Your progress updates after you comment.</p>
+          {% endif %}
+        </div>
+      </section>
+    </div>
+    <div class="col-lg-6">
+      <section class="card h-100" aria-labelledby="received-support-title">
+        <div class="card-body">
+          <h3 class="h5" id="received-support-title">Support you received</h3>
+          {% if community.support.comments %}
+          <p>This week, <strong>{{ community.support.members }} {{ 'member has' if community.support.members == 1 else 'members have' }}</strong>
+            left <strong>{{ community.support.comments }} {{ 'comment' if community.support.comments == 1 else 'comments' }}</strong> on your posts.</p>
+          <ul class="list-unstyled small">
+            {% for comment in community.recent_support %}
+            <li class="mb-2">
+              <a href="{{ url_for('post_detail', post_id=comment.post_id, _anchor='comment-' ~ comment.id) }}">
+                {{ comment.username }} replied: {{ comment.content|truncate(75, true) }}
+              </a>
+            </li>
+            {% endfor %}
+          </ul>
+          <p class="small">Keep the exchange going by replying to someone else.</p>
+          {% else %}
+          <p>No replies to your posts this week yet.</p>
+          <p class="small text-muted">You can still start a conversation with someone who is waiting for a reply.</p>
+          {% endif %}
+          <a class="btn btn-light btn-sm" href="#needs-reply">Help someone else</a>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <section class="card" id="needs-reply" aria-labelledby="needs-reply-title">
+    <div class="card-body">
+      <h3 class="h5" id="needs-reply-title">Needs a reply</h3>
+      <p class="small text-muted">These posts have no comments yet. Share a thought or ask a question.</p>
+      {% if community.needs_reply %}
+      <ul class="list-unstyled mb-0">
+        {% for post in community.needs_reply %}
+        <li class="reply-opportunity{% if not loop.last %} border-bottom{% endif %}" data-post-id="{{ post.id }}">
+          <div class="reply-preview">
+            <strong>{{ post.username }}</strong>
+            <p class="small mb-0">{{ post.content|truncate(120, true) }}</p>
+          </div>
+          <a class="btn btn-primary btn-sm" href="{{ url_for('post_detail', post_id=post.id, _anchor='comments') }}"
+             aria-label="Reply to {{ post.username }}'s post">Reply</a>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="mb-0">Every available post by other members has a reply. Check back when someone posts something new.</p>
+      {% endif %}
+    </div>
+  </section>
+</section>

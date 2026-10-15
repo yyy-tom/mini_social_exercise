@@ -1,4 +1,5 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, g
+from flask import Flask, render_template, request, redirect, url_for, session, flash, g, abort
+from jinja2 import select_autoescape
 from werkzeug.security import generate_password_hash, check_password_hash
 from cryptography.fernet import Fernet
 import collections
@@ -6,11 +7,17 @@ import json
 import sqlite3
 import hashlib
 import re
+import os
 from datetime import datetime
+from contribution import community_week, contribution_dashboard, weekly_goal_progress
 
 app = Flask(__name__)
 app.secret_key = '123456789' 
-DATABASE = 'database.sqlite'
+# Flask's default HTML suffix list does not include this project's .j2 files.
+# Escape user-authored posts, comments, and usernames in all HTML templates.
+app.jinja_env.autoescape = select_autoescape(('html', 'htm', 'xml', 'j2'))
+# A separate demo database can be selected without changing the course dataset.
+DATABASE = os.environ.get('MINISOCIAL_DATABASE', 'database.sqlite')
 
 # Load censorship data
 # WARNING! The censorship.dat file contains disturbing language when decrypted. 
@@ -191,6 +198,14 @@ def feed():
             'comments': comments_moderated
         })
 
+    # Coding Assignment 1: summaries belong to the signed-in member, regardless
+    # of the main feed's filters. Reuse moderation before displaying previews.
+    community = None
+    if current_user_id:
+        community = contribution_dashboard(get_db(), current_user_id)
+        for item in community['needs_reply'] + community['recent_support']:
+            item['content'], _ = moderate_content(item['content'])
+
     #  4. Render Template with Pagination Info 
     return render_template('feed.html.j2', 
                            posts=posts_data, 
@@ -199,7 +214,8 @@ def feed():
                            page=page, # Pass current page number
                            per_page=POSTS_PER_PAGE, # Pass items per page
                            reaction_emojis=REACTION_EMOJIS,
-                           reaction_types=REACTION_TYPES)
+                           reaction_types=REACTION_TYPES,
+                           community=community)
 
 @app.route('/posts/new', methods=['POST'])
 def add_post():
@@ -495,10 +511,23 @@ def add_comment(post_id):
     # Basic validation to ensure comment is not empty
     if content and content.strip():
         db = get_db()
+        post = db.execute('SELECT user_id FROM posts WHERE id = ?', (post_id,)).fetchone()
+        if post is None:
+            flash('This post is no longer available.', 'warning')
+            return redirect(url_for('feed'))
         db.execute('INSERT INTO comments (post_id, user_id, content) VALUES (?, ?, ?)',
                    (post_id, user_id, content))
         db.commit()
-        flash('Your comment was added.', 'success')
+        # Give feedback immediately, including on the post detail page. A reply
+        # to your own post is allowed, but does not advance the community goal.
+        if post['user_id'] != user_id:
+            goal = weekly_goal_progress(db, user_id, community_week())
+            if goal['achieved']:
+                flash('Your comment was added. Weekly goal complete — thank you for joining the conversation!', 'success')
+            else:
+                flash(f"Your comment was added. Weekly goal: {goal['completed']}/{goal['target']} posts.", 'success')
+        else:
+            flash('Your comment was added.', 'success')
     else:
         flash('Comment cannot be empty.', 'warning')
 

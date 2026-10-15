@@ -16,4 +16,30 @@ footer {
   text-align: center;
 }
 
+/* Keep Assignment 1 previews readable on narrow screens and long posts. */
+.community-corner .reply-opportunity {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 0;
+}
+
+.community-corner .reply-preview {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.community-corner .card-body {
+  overflow-wrap: anywhere;
+}
+
+.community-corner .reply-opportunity .btn {
+  flex-shrink: 0;
+}
+
+#needs-reply, #comments, [id^="comment-"] {
+  scroll-margin-top: 1rem;
+}
+
 

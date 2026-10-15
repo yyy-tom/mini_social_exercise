@@ -7,6 +7,7 @@
 </div>
 
 {% if session.get('user_id') %}
+{% include "contribution_dashboard.html.j2" %}
 <div class="col-md-8 mx-auto mb-4">
   <div class="card shadow-sm">
     <div class="card-body">
