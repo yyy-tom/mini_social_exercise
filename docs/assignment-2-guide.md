@@ -82,7 +82,7 @@ profile signup review, admin scores, and a narrow mobile viewport. The supplied
 
 ## Submission materials
 
-- [Report draft](assignment-2-report.md): 478 words including the required
+- [Report draft](assignment-2-report.md): 465 words including the required
   questions and GitHub link. Review the learning/difficulty reflections and
   keep the AI disclosure accurate. Paste the report into Moodle's text editor.
 - An 81-second silent annotated recording is saved in the course

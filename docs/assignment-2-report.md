@@ -8,28 +8,30 @@ into Moodle, keeping the five questions. Review the supplied annotated video too
 
 **What features did you implement, and how does each implemented feature function?**
 
-For this assignment, I added automatic moderation, user risk analysis and a preview that lets members check their text before publishing it.
+For Assignment 2, I added a content filter and user risk scores to MiniSocial. I also added a preview so members can see what will happen to their message before sharing it.
 
-The moderation function follows MiniSocial’s rules. A Tier 1 word removes the entire text with a severe-violation message and a score of 5. A Tier 2 spam or scam phrase also removes the text with its own message and the same score. Otherwise, each Tier 3 word is replaced with asterisks and adds 2 points. Each external link is removed and adds another 2 points. Text with more than 15 letters receives an extra 0.5 points when over 70% of those letters are uppercase. Matching ignores case and avoids censoring words simply because they contain a listed word.
+The filter follows the supplied rules. A Tier 1 word or Tier 2 spam phrase replaces the whole text with a removal message and gives it a score of 5. Milder Tier 3 words are covered with asterisks, and external links are removed. Each match adds 2 points. Text with more than 15 letters gets another 0.5 points if over 70% are capitals. The filter ignores case and checks whole words to avoid catching harmless words that contain a listed term.
 
-The user risk function combines the profile score, three times the average post score and the average comment score. It applies the required account-age multiplier and caps the result at 5. Missing posts or comments contribute zero. Administrators can inspect these scores in the existing dashboard.
+User risk combines the profile score, three times the average post score and the average comment score. Newer accounts receive the required multiplier, and the final score is capped at 5. The admin dashboard displays these scores for review.
 
-**How does the feature fulfil the Design Claim it aims to implement?**
+**How does the feature fulfil the Design Claim (see course book) it aims to implement?**
 
-The preview follows Chapter 4, Design Claim 20: reminders at the point of a potentially rule-breaking action can reduce offenses. When a post, comment or introduction triggers moderation, MiniSocial pauses before saving it. The member sees the filtered result, an explanation of the triggered rules and a link to the rules page.
+I chose Chapter 4, Design Claim 20, which suggests that reminders at the moment someone might break a rule can reduce offenses.
 
-They can rewrite the draft, check it again or explicitly publish the moderated version. A changed draft is checked again before any affected text is published. This gives someone a practical chance to fix a message while they are still deciding what to share. The feature implements the claim’s proposed mechanism; it does not prove that offenses decrease without a user study.
+When a post, comment or profile introduction triggers a rule, MiniSocial opens a private review before saving anything. It shows the filtered text and explains what caused the warning. Members can edit their draft, check it again or publish the filtered version.
+
+For example, someone who writes an angry reply can replace it with a calmer response before others see it. The reminder comes while they can still change their mind. Whether this actually reduces offenses would need testing with real users.
 
 **What did you learn during the coding assignment?**
 
-This implementation helped me understand the difference between filtering one message and estimating risk across an account’s history. A single content score can exceed 5, while the final user score is capped. Keeping the original text also matters: calculating risk from already censored text would hide the violations from later analysis.
+The assignment helped me understand why message scores and user scores need different calculations. One message can score above 5, but the account score has a limit. Another detail was keeping the original text for risk analysis. If the system only kept the censored version, later checks would lose the evidence of what triggered the filter.
 
 **What was difficult, if anything?**
 
-The main implementation challenges were matching whole words, handling the exact age boundaries and keeping the preview consistent with publication. Tests cover those cases, including repeated violations and drafts changed after review. The signup preview also requires the password again so it is never carried through the preview page.
+The tricky parts were the small details: counting repeated words correctly and applying the age multiplier at exactly seven and thirty days. The preview also had to check edited drafts again, so someone could not review one message and then publish a different flagged message without another check. Automated tests cover these cases.
 
 **How was AI used in your assignment?**
 
-I used AI extensively to interpret the requirements, propose the preview, generate the implementation and tests, and draft this report and the demo script. AI also ran automated checks and browser verification, and produced an annotated demo recording. The code and report need my review so I can explain their behaviour accurately.
+I used AI extensively to interpret the instructions, suggest the preview and generate the code and tests. It also checked the app in the browser, created the annotated demo video and helped write this report. I still need to review the work and make sure I can explain how it behaves.
 
 Repository: https://github.com/yyy-tom/mini_social_exercise/tree/assignment-2
