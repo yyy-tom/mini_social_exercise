@@ -1,0 +1,46 @@
+{% extends "base.html.j2" %}
+{% block content %}
+<div class="col-lg-8 mx-auto my-4">
+  <span class="badge bg-info text-dark mb-2">PRIVATE PRACTICE</span>
+  <h1 class="h2">Try MiniSocial before posting</h1>
+  <p>Practise writing a post, adding a reply and reacting. These are simulations: nothing here appears in the public feed or changes your account's activity.</p>
+  <p class="small text-muted">Practice stays on this page. Opening the practice area again or resetting clears it.</p>
+  {% if error %}<p class="alert alert-warning" role="alert">{{ error }}</p>{% endif %}
+  <p class="fw-bold" role="status">Practice steps: {{ completed }}/3 complete</p>
+  <div class="card mb-4"><div class="card-body">
+    <h2 class="h5">1. Write a practice post</h2>
+    <form method="POST" action="{{ url_for('practice') }}">
+      <label for="practice-post" class="form-label">Your practice post</label>
+      <textarea id="practice-post" class="form-control mb-3" name="post_text" rows="3" maxlength="1000" placeholder="Ask a question or share something you enjoy." required>{{ post_text }}</textarea>
+      <button class="btn btn-primary" name="action" value="post" type="submit">Post privately</button>
+    </form>
+  </div></div>
+  {% if post_text and not error %}
+  <article class="card mb-4" id="practice-preview"><div class="card-body">
+    <h2 class="h5">Your private practice conversation</h2>
+    <p class="small text-muted">This is how a post and replies look. Real posts are shared with the community.</p>
+    <p style="white-space: pre-wrap; overflow-wrap: anywhere;">{{ post_text }}</p>
+    <form method="POST" action="{{ url_for('practice') }}">
+      <input type="hidden" name="post_text" value="{{ post_text }}">
+      <input type="hidden" name="saved_comment" value="{{ comment_text }}">
+      <input type="hidden" name="reacted" value="{{ '1' if reacted else '0' }}">
+      <h3 class="h6">2. Try a reaction</h3>
+      <p>A reaction is a quick way to respond. Positive reactions also help your real recommendations learn your interests.</p>
+      <button type="submit" class="btn {{ 'btn-primary' if reacted else 'btn-light' }} mb-3" name="action" value="react">{{ 'Remove practice like' if reacted else 'Like privately' }}</button>
+      {% if reacted %}<span class="ms-2">❤️ 1 practice like</span>{% endif %}
+      <h3 class="h6">3. Add a practice reply</h3>
+      <label for="practice-comment" class="form-label">Write a friendly reply or ask a follow-up question</label>
+      <textarea id="practice-comment" class="form-control mb-3" name="comment_text" rows="2" maxlength="500">{{ comment_draft }}</textarea>
+      <button type="submit" class="btn btn-primary" name="action" value="comment">Reply privately</button>
+    </form>
+    {% if comment_text %}<div class="border-top mt-3 pt-3"><strong>Your practice reply</strong><p style="overflow-wrap: anywhere;">{{ comment_text }}</p></div>{% endif %}
+  </div></article>
+  {% endif %}
+  {% if completed == 3 %}<p class="alert alert-success" role="status">You have tried all three actions. When you feel ready, introduce yourself or join a real discussion.</p>{% endif %}
+  <div class="d-flex flex-wrap gap-2">
+    <a class="btn btn-light" href="{{ url_for('practice') }}">Reset practice</a>
+    <a class="btn btn-primary" href="{{ url_for('introductions') }}">Meet the community</a>
+    <a class="btn btn-light" href="{{ url_for('feed') }}">Back to real posts</a>
+  </div>
+</div>
+{% endblock %}

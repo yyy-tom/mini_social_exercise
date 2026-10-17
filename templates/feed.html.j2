@@ -8,6 +8,16 @@
 
 {% if session.get('user_id') %}
 <div class="col-md-8 mx-auto mb-4">
+  <div class="card"><div class="card-body">
+    <h2 class="h5">{{ 'Help someone feel welcome' if has_introduction else 'Find your place in MiniSocial' }}</h2>
+    <p>{{ 'Visit the introduction hub and say hello to another member.' if has_introduction else 'Introduce yourself to start a conversation, or try the private practice area first.' }}</p>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-primary" href="{{ url_for('introductions') }}">Meet the community</a>
+      <a class="btn btn-light" href="{{ url_for('practice') }}">Private practice</a>
+    </div>
+  </div></div>
+</div>
+<div class="col-md-8 mx-auto mb-4">
   <div class="card shadow-sm">
     <div class="card-body">
       <h5 class="card-title">Create a new post</h5>
@@ -22,7 +32,10 @@
 </div>
 {% endif %}
 
-<h2 class="text-center border-bottom pb-2 mb-4"><span>Posts</span></h2>
+<h2 class="text-center border-bottom pb-2 mb-4"><span>{{ 'Recommended posts' if current_sort == 'recommended' else 'Posts' }}</span></h2>
+{% if current_sort == 'recommended' %}
+<p class="text-center text-muted">Up to five posts selected using your positive reactions and people you follow, shown newest first. Without those signals, start with recent posts.</p>
+{% endif %}
 
 <div class="mb-4 text-center">
 
@@ -54,10 +67,10 @@
       <div class="d-flex justify-content-between align-items-center">
         <h3 class="card-title mb-0">
           {% if entry.followed_poster %}
-          <a href="/u/{{ entry.post.user_id }}">{{ user_display(entry.post.username) }}<span class="text-success p-1" data-toggle="tooltip" data-placement="top" title="You are following this user"> ✓ </span>
+          <a href="/u/{{ entry.post.username }}">{{ user_display(entry.post.username) }}<span class="text-success p-1" data-toggle="tooltip" data-placement="top" title="You are following this user"> ✓ </span>
 </a>
           {% else %}
-          <a href="/u/{{ entry.post.user_id }}">{{ user_display(entry.post.username) }} </a>
+          <a href="/u/{{ entry.post.username }}">{{ user_display(entry.post.username) }} </a>
           {% endif %}
         </h3>
 
@@ -76,7 +89,9 @@
         {% endif %}
       </div>
       
-      <p class="mt-2">{{ entry.post.content }}</p>
+      {% if entry.post.is_introduction %}<span class="badge bg-info text-dark">Introduction</span>{% endif %}
+      {% if entry.post.recommendation_reason %}<p class="small text-muted mt-2 mb-1">{{ entry.post.recommendation_reason }}</p>{% endif %}
+      <p class="mt-2" style="overflow-wrap: anywhere;">{{ entry.post.content }}</p>
 
       <!-- Reactions Display and Add Reaction Button -->
       <div class="d-flex align-items-center mt-2 mb-2">
@@ -185,10 +200,11 @@
   </div>
 
   {% else %}
-  <p class="text-center">No posts to display.</p>
+  <p class="text-center">{% if current_sort == 'recommended' and current_show == 'following' %}No new posts from people you follow. Follow a member or switch to All.{% else %}No posts to display.{% endif %}</p>
   {% endfor %}
 </div>
 
+  {% if current_sort != 'recommended' %}
   <div class="d-flex justify-content-center align-items-center my-4">
     <a href="{{ url_for('feed', page=page-1, sort=current_sort, show=current_show) }}"
       class="btn btn-primary {% if page <= 1 %}btn-light disabled{% endif %}">
@@ -200,4 +216,5 @@
       Next &raquo;
     </a>
   </div>
+  {% endif %}
 {% endblock %}
