@@ -44,8 +44,8 @@ changed-draft confirmation and no writes before approval. Use temporary database
 for tests and a separate seeded demo database. Preserve database.sqlite.
 
 Provide a clear guide, a 400–500 word report draft answering the five questions,
-and a two-minute recording script. The user must review personal reflections
-and record/upload the video to Moodle.
+and a two-minute recording script. An annotated recording of the real app is also supplied. The user must review
+the personal reflections and recording, then submit the materials to Moodle.
 
 ## Sources
 

@@ -24,7 +24,9 @@
         <label for="profile" class="form-label">Profile</label>
         <textarea class="form-control" id="profile" name="profile" rows="3"></textarea>
       </div>
-      <div class="d-grid">
+      <p class="small text-muted">Your introduction is checked before your account is created. You can revise it if a moderation rule is triggered.</p>
+      <div class="d-grid gap-2">
+        <button type="submit" name="moderation_action" value="preview" class="btn btn-light">Check introduction</button>
         <button type="submit" class="btn btn-primary">Sign Up</button>
       </div>
     </form>
@@ -35,16 +37,4 @@
     </div>
   </div>
 </div>
-{% endblock %}```
-
-**Change Made:**
-*   Added the following block after the `</form>` tag:
-    ```html
-    <div class="text-center mt-3">
-      <small class="text-muted">
-        Already have an account? <a href="/login">Login</a>
-      </small>
-    </div>
-    ```
-
-These additions create a clear and user-friendly navigation path between your two main authentication pages.
+{% endblock %}

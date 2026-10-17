@@ -15,6 +15,7 @@
         <div class="mb-3">
           <textarea class="form-control" name="content" rows="3" placeholder="What's on your mind, {{ session.get('username') }}?" required></textarea>
         </div>
+        <button type="submit" name="moderation_action" value="preview" class="btn btn-light">Check before posting</button>
         <button type="submit" class="btn btn-primary float-end">Post</button>
       </form>
     </div>
@@ -177,6 +178,7 @@
               <label for="comment-content-{{ entry.post.id }}" class="form-label">Your Comment</label>
               <textarea class="form-control" id="comment-content-{{ entry.post.id }}" name="content" rows="3" required></textarea>
             </div>
+            <button type="submit" name="moderation_action" value="preview" class="btn btn-light">Check comment</button>
             <button type="submit" class="btn btn-primary">Submit Comment</button>
           </form>
         </div>

@@ -114,7 +114,8 @@
             <label for="comment-content-{{ post.id }}" class="form-label">Your Comment</label>
             <textarea class="form-control" id="comment-content-{{ post.id }}" name="content" rows="3" required></textarea>
           </div>
-          <button type="submit" class="btn btn-primary">Submit Comment</button>
+          <button type="submit" name="moderation_action" value="preview" class="btn btn-light">Check comment</button>
+            <button type="submit" class="btn btn-primary">Submit Comment</button>
         </form>
       </div>
     </div>
