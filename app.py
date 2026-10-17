@@ -1,4 +1,5 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, g
+from flask import Flask, render_template, request, redirect, url_for, session, flash, g, abort
+from jinja2 import select_autoescape
 from werkzeug.security import generate_password_hash, check_password_hash
 from cryptography.fernet import Fernet
 import collections
@@ -6,11 +7,15 @@ import json
 import sqlite3
 import hashlib
 import re
-from datetime import datetime
+import os
+from datetime import datetime, timezone
 
 app = Flask(__name__)
-app.secret_key = '123456789' 
-DATABASE = 'database.sqlite'
+# Keep preview confirmations in a signed session with a non-public key.
+app.secret_key = os.environ.get('MINISOCIAL_SECRET_KEY') or os.urandom(32)
+# Public content and private previews must both escape user-authored HTML.
+app.jinja_env.autoescape = select_autoescape(('html', 'htm', 'xml', 'j2'))
+DATABASE = os.environ.get('MINISOCIAL_DATABASE', 'database.sqlite')
 
 # Load censorship data
 # WARNING! The censorship.dat file contains disturbing language when decrypted. 
@@ -214,19 +219,20 @@ def add_post():
     # Get content from the submitted form
     content = request.form.get('content')
 
-    # Pass the user's content through the moderation function
-    moderated_content = content
-
     # Basic validation to ensure post is not empty
-    if moderated_content and moderated_content.strip():
+    if content and content.strip():
+        review = review_before_saving(content, 'post')
+        if review is not None:
+            return review
         db = get_db()
+        # Retain the original for risk analysis; all public views filter it.
         db.execute('INSERT INTO posts (user_id, content) VALUES (?, ?)',
-                   (user_id, moderated_content))
+                   (user_id, content))
         db.commit()
         flash('Your post was successfully created!', 'success')
     else:
-        # This will catch empty posts or posts that were fully censored
-        flash('Post cannot be empty or was fully censored.', 'warning')
+        # Empty submissions never enter the review or database
+        flash('Post cannot be empty.', 'warning')
 
     # Redirect back to the main feed to see the new post
     return redirect(url_for('feed'))
@@ -386,7 +392,6 @@ def post_detail(post_id):
     for comment_raw in comments_raw:
         comment = dict(comment_raw) # Convert to a dictionary
         # Moderate the content of each comment
-        print(comment['content'])
         moderated_comment_content, _ = moderate_content(comment['content'])
         comment['content'] = moderated_comment_content
         comments.append(comment)
@@ -417,6 +422,11 @@ def signup():
         birthdate = request.form.get('birthdate', '')
         profile = request.form.get('profile', '')
 
+        review = review_before_saving(profile, 'profile', signup_fields={
+            'username': username, 'location': location, 'birthdate': birthdate,
+        })
+        if review is not None:
+            return review
         hashed_password = generate_password_hash(password)
 
         db = get_db()
@@ -444,7 +454,6 @@ def signup():
             flash('Username already taken. Please choose another one.', 'danger')
         finally:
             cur.close()
-            db.close()
             
     return render_template('signup.html.j2')
 
@@ -456,7 +465,6 @@ def login():
 
         db = get_db()
         user = db.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
-        db.close()
 
         # 1. Check if the user exists.
         # 2. If user exists, use check_password_hash to securely compare the password.
@@ -495,6 +503,11 @@ def add_comment(post_id):
     # Basic validation to ensure comment is not empty
     if content and content.strip():
         db = get_db()
+        if db.execute('SELECT id FROM posts WHERE id = ?', (post_id,)).fetchone() is None:
+            abort(404)
+        review = review_before_saving(content, 'comment', post_id=post_id)
+        if review is not None:
+            return review
         db.execute('INSERT INTO comments (post_id, user_id, content) VALUES (?, ?, ?)',
                    (post_id, user_id, content))
         db.commit()
@@ -741,7 +754,7 @@ def admin_dashboard():
         _, base_score = moderate_content(post_dict['content'])
         final_score = base_score 
         author_created_dt = post_dict['user_created_at']
-        author_age_days = (datetime.utcnow() - author_created_dt).days
+        author_age_days = account_age_days(author_created_dt)
         if author_age_days < 7:
             final_score *= 1.5
         risk_label, risk_sort_key = get_risk_profile(final_score)
@@ -768,7 +781,7 @@ def admin_dashboard():
         comment_dict = dict(comment)
         _, score = moderate_content(comment_dict['content'])
         author_created_dt = comment_dict['user_created_at']
-        author_age_days = (datetime.utcnow() - author_created_dt).days
+        author_age_days = account_age_days(author_created_dt)
         if author_age_days < 7:
             score *= 1.5
         risk_label, risk_sort_key = get_risk_profile(score)
@@ -866,51 +879,129 @@ def loop_color(user_id):
     return f'rgb({r % 128 + 80}, {g % 128 + 80}, {b % 128 + 80})'
 
 
-# ----- Functions to be implemented are below
-# Coding Assignment #2
+# Coding Assignment #2: the two required functions and the private preview.
+def account_age_days(created_at):
+    """SQLite's naive timestamps represent UTC. Missing dates count as new."""
+    if isinstance(created_at, str):
+        created_at = datetime.fromisoformat(created_at)
+    now = datetime.now(timezone.utc)
+    if created_at is None:
+        return 0
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
+    return max(0, (now - created_at).days)
 
-# Assignment 2.2
+
 def user_risk_analysis(user_id):
+    """Apply rules 2.2 exactly, using original text rather than filtered text.
+
+    Empty post/comment groups contribute zero. The specified weighted sum is
+    not divided by five. Age is applied once, and only user risk is capped.
     """
-    Args:
-        user_id: The ID of the user on which we perform risk analysis.
+    db = get_db()
+    user = db.execute('SELECT profile, created_at FROM users WHERE id = ?',
+                      (user_id,)).fetchone()
+    if user is None:
+        return 0.0
 
-    Returns:
-        A float number score showing the risk associated with this user. There are no strict rules or bounds to this score, other than that a score of less than 1.0 means no risk, 1.0 to 3.0 is low risk, 3.0 to 5.0 is medium risk and above 5.0 is high risk. (An upper bound of 5.0 is applied to this score elsewhere in the codebase) 
-        
-        You will be able to check the scores by logging in with the administrator account:
-            username: admin
-            password: admin
-        Then, navigate to the /admin endpoint. (http://localhost:8080/admin)
+    def average_score(table):
+        # Table names are fixed internal constants, never request parameters.
+        rows = db.execute(f'SELECT content FROM {table} WHERE user_id = ?',
+                          (user_id,)).fetchall()
+        return sum(moderate_content(row['content'])[1] for row in rows) / len(rows) if rows else 0.0
+
+    profile_score = moderate_content(user['profile'])[1]
+    score = profile_score + 3 * average_score('posts') + average_score('comments')
+    age = account_age_days(user['created_at'])
+    multiplier = 1.5 if age < 7 else 1.2 if age < 30 else 1.0
+    return min(5.0, score * multiplier)
+
+
+def _word_pattern(terms):
+    """Escape literal terms and avoid matching them inside another word."""
+    alternatives = '|'.join(re.escape(term) for term in sorted(set(terms), key=len, reverse=True))
+    return re.compile(r'(?<!\w)(?:' + alternatives + r')(?!\w)', re.IGNORECASE)
+
+
+_TIER1 = _word_pattern(TIER1_WORDS)
+_TIER2 = _word_pattern(TIER2_PHRASES)
+_TIER3 = _word_pattern(TIER3_WORDS)
+# Recognize scheme-based and www URLs. Leave adjacent sentence punctuation.
+_URL = re.compile(r'''\b(?:https?://|ftp://|www\.)[^\s<>"']+''', re.IGNORECASE)
+
+
+def moderation_result(content):
+    """Return filtered text, the raw content score, and plain-language rules.
+
+    The public display function and the private preview share this evaluator;
+    the preview can therefore never silently apply a different moderation rule.
     """
-    
-    score = 0
+    content = content or ''
+    if _TIER1.search(content):
+        return '[content removed due to severe violation]', 5.0, ['A severe-language rule removes the entire text.']
+    if _TIER2.search(content):
+        return '[content removed due to spam/scam policy]', 5.0, ['A spam/scam rule removes the entire text.']
 
-    return score;
+    filtered, mild_count = _TIER3.subn(lambda match: '*' * len(match.group()), content)
 
-    
-# Assignment 2.1
+    def remove_url(match):
+        url = match.group()
+        suffix = ''
+        while url and (url[-1] in '.,;:!?' or
+                       (url[-1] == ')' and url.count(')') > url.count('('))):
+            suffix = url[-1] + suffix
+            url = url[:-1]
+        return '[link removed]' + suffix
+
+    filtered, link_count = _URL.subn(remove_url, filtered)
+    score = 2.0 * (mild_count + link_count)
+    reasons = []
+    if mild_count:
+        reasons.append(f'Mild language: {mild_count} match(es) masked, +{mild_count * 2:.1f}.')
+    if link_count:
+        reasons.append(f'External links: {link_count} link(s) removed, +{link_count * 2:.1f}.')
+    # Count letters in the ORIGINAL text, including words and URLs later masked.
+    letters = [character for character in content if character.isalpha()]
+    if len(letters) > 15 and sum(character.isupper() for character in letters) / len(letters) > 0.7:
+        score += 0.5
+        reasons.append('More than 70% capitals in over 15 letters: +0.5; text unchanged.')
+    return filtered, score, reasons
+
+
 def moderate_content(content):
-    """
-    Args
-        content: the text content of a post or comment to be moderated.
-        
-    Returns: 
-        A tuple containing the moderated content (string) and a severity score (float). There are no strict rules or bounds to the severity score, other than that a score of less than 1.0 means no risk, 1.0 to 3.0 is low risk, 3.0 to 5.0 is medium risk and above 5.0 is high risk.
-    
-    This function moderates a string of content and calculates a severity score based on
-    rules loaded from the 'censorship.dat' file. These are already loaded as TIER1_WORDS, TIER2_PHRASES and TIER3_WORDS. Tier 1 corresponds to strong profanity, Tier 2 to scam/spam phrases and Tier 3 to mild profanity.
-    
-    You will be able to check the scores by logging in with the administrator account:
-            username: admin
-            password: admin
-    Then, navigate to the /admin endpoint. (http://localhost:8080/admin)
-    """
+    """Assignment 2.1: return (filtered text, content score), per /rules.
 
-    moderated_content = content
-    score = 0
-    
-    return moderated_content, score
+    Tier 1 takes priority over Tier 2; either removes the entire text with a
+    fixed score of 5. Otherwise every mild-word occurrence and every URL adds
+    2, and excessive capitalization adds 0.5. Content scores are not capped.
+    Risk labels are NONE <1, LOW >=1, MEDIUM >=3 and HIGH >=5.
+    """
+    filtered, score, _ = moderation_result(content)
+    return filtered, score
+
+
+def review_before_saving(content, kind, post_id=None, signup_fields=None):
+    """Design Claim 20: offer a private chance to revise BEFORE publication.
+
+    Only a digest is stored in the signed session. Publishing an edited draft
+    or switching target posts requires another review. Passwords are never
+    carried into the review: signup asks the member to enter theirs again.
+    """
+    filtered, score, reasons = moderation_result(content)
+    action = request.form.get('moderation_action')
+    digest = hashlib.sha256(json.dumps([kind, post_id, content]).encode()).hexdigest()
+    if action == 'publish' and session.get('moderation_preview') == digest:
+        session.pop('moderation_preview', None)
+        return None
+    if score == 0 and action != 'preview':
+        return None
+    session['moderation_preview'] = digest
+    return render_template('moderation_review.html.j2', draft=content,
+                           filtered=filtered, score=score, reasons=reasons,
+                           kind=kind, signup_fields=signup_fields,
+                           action_url=request.path,
+                           cancel_url=url_for('signup') if kind == 'profile' else
+                           url_for('post_detail', post_id=post_id) if post_id else url_for('feed'))
 
 # Coding Assignment #3
 # Assignment 3.1

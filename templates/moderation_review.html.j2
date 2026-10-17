@@ -1,0 +1,39 @@
+{% extends "base.html.j2" %}
+{% block content %}
+<div class="col-lg-8 mx-auto my-4">
+  <div class="card shadow-sm">
+    <div class="card-body p-4">
+      <h1 class="h3">Check before publishing</h1>
+      <p>Keep the conversation respectful. Avoid abusive language, spam, external links and excessive capitals.
+        You can revise your {{ kind }} before it is shared. <a href="{{ url_for('rules') }}" target="_blank" rel="noopener">Read the moderation rules</a>.</p>
+      <div class="alert {{ 'alert-warning' if reasons else 'alert-success' }}" role="status">
+        {% if reasons %}
+        <p class="fw-bold mb-2">Please review these changes</p>
+        <ul class="mb-0">{% for reason in reasons %}<li>{{ reason }}</li>{% endfor %}</ul>
+        {% else %}No moderation rules were triggered. Your draft is ready to share.{% endif %}
+      </div>
+      <h2 class="h5">What other members will see</h2>
+      <div class="border rounded p-3 mb-2" style="white-space: pre-wrap; overflow-wrap: anywhere;" id="moderated-preview">{{ filtered }}</div>
+      <p class="small text-muted">Content score: <strong>{{ '%.1f'|format(score) }}</strong>. This is a score for this text, not your account's risk score.</p>
+      <form method="POST" action="{{ action_url }}">
+        {% if signup_fields %}
+        {% for name, value in signup_fields.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+        {% endif %}
+        <label class="form-label" for="review-draft">Revise your {{ kind }}</label>
+        <textarea class="form-control mb-3" id="review-draft" name="{{ 'profile' if kind == 'profile' else 'content' }}" rows="4" {% if kind != 'profile' %}required{% endif %}>{{ draft }}</textarea>
+        {% if kind == 'profile' %}
+        <label class="form-label" for="review-password">Re-enter your password to create your account</label>
+        <input type="password" class="form-control mb-3" id="review-password" name="password" autocomplete="new-password" required>
+        <p class="small text-muted">Your password was not kept in the preview.</p>
+        {% endif %}
+        <div class="d-flex flex-wrap gap-2">
+          <button class="btn btn-primary" type="submit" name="moderation_action" value="preview">Check revision</button>
+          <button class="btn btn-light" type="submit" name="moderation_action" value="publish">{{ 'Create account with this profile' if kind == 'profile' else 'Publish moderated ' ~ kind }}</button>
+          <a class="btn btn-light" href="{{ cancel_url }}">Cancel</a>
+        </div>
+        <p class="small text-muted mt-3 mb-0">Editing the draft requires a fresh check before publishing. Only the filtered result is public.</p>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
