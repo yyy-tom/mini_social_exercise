@@ -1,4 +1,5 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, g
+from flask import Flask, render_template, request, redirect, url_for, session, flash, g, abort
+from jinja2 import select_autoescape
 from werkzeug.security import generate_password_hash, check_password_hash
 from cryptography.fernet import Fernet
 import collections
@@ -6,11 +7,15 @@ import json
 import sqlite3
 import hashlib
 import re
+import os
+from recommendations import recommended_posts
+from newcomers import ensure_schema, own_introduction, publish_introduction, recent_introductions
 from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = '123456789' 
-DATABASE = 'database.sqlite'
+app.secret_key = os.environ.get('MINISOCIAL_SECRET_KEY') or os.urandom(32)
+app.jinja_env.autoescape = select_autoescape(('html', 'htm', 'xml', 'j2'))
+DATABASE = os.environ.get('MINISOCIAL_DATABASE', 'database.sqlite')
 
 # Load censorship data
 # WARNING! The censorship.dat file contains disturbing language when decrypted. 
@@ -39,6 +44,7 @@ def get_db():
             detect_types=sqlite3.PARSE_DECLTYPES
         )
         g.db.row_factory = sqlite3.Row
+        ensure_schema(g.db)
 
     return g.db
 
@@ -137,7 +143,10 @@ def feed():
         final_params = params + list(pagination_params)
         posts = query_db(query, final_params)
     elif sort == 'recommended':
-        posts = recommend(current_user_id, show == 'following' and current_user_id)
+        # Recommendations are one selected set of five, not a paginated feed.
+        page = 1
+        POSTS_PER_PAGE = 5
+        posts = recommend(current_user_id, show == 'following')
     else:  # Default sort is 'new'
         query = f"""
             SELECT p.id, p.content, p.created_at, u.username, u.id as user_id
@@ -150,6 +159,7 @@ def feed():
         final_params = params + list(pagination_params)
         posts = query_db(query, final_params)
 
+    introduction_ids = {row['post_id'] for row in query_db('SELECT post_id FROM introductions')}
     posts_data = []
     for post in posts:
         # Determine if the current user follows the poster
@@ -177,6 +187,7 @@ def feed():
         reactions = query_db('SELECT reaction_type, COUNT(*) as count FROM reactions WHERE post_id = ? GROUP BY reaction_type', (post['id'],))
         comments_raw = query_db('SELECT c.id, c.content, c.created_at, u.username, u.id as user_id FROM comments c JOIN users u ON c.user_id = u.id WHERE c.post_id = ? ORDER BY c.created_at ASC', (post['id'],))
         post_dict = dict(post)
+        post_dict['is_introduction'] = post_dict['id'] in introduction_ids
         post_dict['content'], _ = moderate_content(post_dict['content'])
         comments_moderated = []
         for comment in comments_raw:
@@ -199,7 +210,8 @@ def feed():
                            page=page, # Pass current page number
                            per_page=POSTS_PER_PAGE, # Pass items per page
                            reaction_emojis=REACTION_EMOJIS,
-                           reaction_types=REACTION_TYPES)
+                           reaction_types=REACTION_TYPES,
+                           has_introduction=bool(own_introduction(get_db(), current_user_id)) if current_user_id else False)
 
 @app.route('/posts/new', methods=['POST'])
 def add_post():
@@ -367,6 +379,7 @@ def post_detail(post_id):
     #  Moderation for the Main Post 
     # Convert the raw database row to a mutable dictionary
     post = dict(post_raw)
+    post['is_introduction'] = bool(query_db('SELECT 1 FROM introductions WHERE post_id=?', (post_id,), one=True))
     # Unpack the tuple from moderate_content, we only need the moderated content string here
     moderated_post_content, _ = moderate_content(post['content'])
     post['content'] = moderated_post_content
@@ -386,7 +399,6 @@ def post_detail(post_id):
     for comment_raw in comments_raw:
         comment = dict(comment_raw) # Convert to a dictionary
         # Moderate the content of each comment
-        print(comment['content'])
         moderated_comment_content, _ = moderate_content(comment['content'])
         comment['content'] = moderated_comment_content
         comments.append(comment)
@@ -406,6 +418,65 @@ def about():
 @app.route('/privacy')
 def privacy():
     return render_template('privacy.html.j2')
+
+
+@app.route('/introductions', methods=['GET', 'POST'])
+def introductions():
+    """Claim 19: turn an optional introduction into a public conversation."""
+    user_id = session.get('user_id')
+    if not user_id:
+        return redirect(url_for('login'))
+    db = get_db()
+    draft = request.form.get('content', '').strip()
+    error = None
+    if request.method == 'POST':
+        if not draft or len(draft) > 1000:
+            error = 'Write an introduction of 1–1000 characters.'
+        else:
+            post_id, created = publish_introduction(db, user_id, draft)
+            flash('Your introduction is public. Welcome to MiniSocial!' if created else
+                  'You already have an introduction. Continue the conversation here.', 'success')
+            return redirect(url_for('post_detail', post_id=post_id))
+    entries = recent_introductions(db)
+    for entry in entries:
+        entry['content'], _ = moderate_content(entry['content'])
+    return render_template('introductions.html.j2', entries=entries, draft=draft,
+                           own_intro=own_introduction(db, user_id), error=error), 400 if error else 200
+
+
+@app.route('/practice', methods=['GET', 'POST'])
+def practice():
+    """Claim 24: try posting, replying and reacting without database writes.
+
+    All practice state belongs to this response and its escaped form fields.
+    It is never stored in the session or passed to a public publishing route.
+    """
+    if not session.get('user_id'):
+        return redirect(url_for('login'))
+    action = request.form.get('action') if request.method == 'POST' else None
+    post_text = request.form.get('post_text', '').strip() if action else ''
+    comment_text = request.form.get('saved_comment', '').strip() if action else ''
+    comment_draft = request.form.get('comment_text', comment_text).strip() if action else ''
+    reacted = request.form.get('reacted') == '1' if action else False
+    error = None
+    if action:
+        if action not in {'post', 'comment', 'react'}:
+            error = 'Choose a practice action.'
+        elif not post_text or len(post_text) > 1000 or max(len(comment_text), len(comment_draft)) > 500:
+            error = 'Use 1–1000 characters for your practice post and up to 500 for your reply.'
+        elif action == 'post':
+            comment_text, comment_draft, reacted = '', '', False
+        elif action == 'comment':
+            if not comment_draft:
+                error = 'Write a reply before adding it.'
+            else:
+                comment_text = comment_draft
+        elif action == 'react':
+            reacted = not reacted
+    completed = int(bool(post_text) and not error) + int(bool(comment_text) and not error) + int(reacted and not error)
+    return render_template('practice.html.j2', post_text=post_text, comment_text=comment_text,
+                           comment_draft=comment_draft, reacted=reacted, completed=completed,
+                           error=error), 400 if error else 200
 
 
 @app.route('/signup', methods=['GET', 'POST'])
@@ -438,13 +509,12 @@ def signup():
 
             # 3. Flash a welcome message and redirect to the feed.
             flash(f'Welcome, {username}! Your account has been created.', 'success')
-            return redirect(url_for('feed')) # Redirect to the main feed/dashboard
+            return redirect(url_for('introductions')) # Offer an optional first introduction.
 
         except sqlite3.IntegrityError:
             flash('Username already taken. Please choose another one.', 'danger')
         finally:
             cur.close()
-            db.close()
             
     return render_template('signup.html.j2')
 
@@ -456,7 +526,6 @@ def login():
 
         db = get_db()
         user = db.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
-        db.close()
 
         # 1. Check if the user exists.
         # 2. If user exists, use check_password_hash to securely compare the password.
@@ -495,6 +564,8 @@ def add_comment(post_id):
     # Basic validation to ensure comment is not empty
     if content and content.strip():
         db = get_db()
+        if db.execute('SELECT 1 FROM posts WHERE id=?', (post_id,)).fetchone() is None:
+            abort(404)
         db.execute('INSERT INTO comments (post_id, user_id, content) VALUES (?, ?, ?)',
                    (post_id, user_id, content))
         db.commit()
@@ -934,9 +1005,9 @@ def recommend(user_id, filter_following):
     - https://www.researchgate.net/publication/227268858_Recommender_Systems_Handbook
     """
 
-    recommended_posts = {} 
-
-    return recommended_posts;
+    # Assignment 3: content similarity plus followed-author preference. The
+    # helper returns the best five in reverse chronological display order.
+    return recommended_posts(get_db(), user_id, bool(filter_following))
 
 if __name__ == '__main__':
     app.run(debug=True, port=8080)

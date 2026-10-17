@@ -1,0 +1,41 @@
+{% extends "base.html.j2" %}
+{% from "macros/user_macros.html.j2" import user_display %}
+{% block content %}
+<div class="col-lg-8 mx-auto my-4">
+  <h1 class="h2">Meet the community</h1>
+  <p>Tell us a little about yourself, or welcome someone who has just arrived.</p>
+  <div class="card mb-4"><div class="card-body">
+    {% if own_intro %}
+    <h2 class="h5">Your introduction is live</h2>
+    <a class="btn btn-primary" href="{{ url_for('post_detail', post_id=own_intro.id) }}">View your introduction</a>
+    {% else %}
+    <h2 class="h5">Introduce yourself</h2>
+    <p>What interests you? What would you like to learn or share here?</p>
+    <p class="small text-muted">This is optional. Your introduction will be a public post that members can reply to.</p>
+    {% if error %}<p class="alert alert-warning" role="alert">{{ error }}</p>{% endif %}
+    <form method="POST" action="{{ url_for('introductions') }}">
+      <label class="form-label" for="introduction-content">Your introduction</label>
+      <textarea class="form-control mb-3" id="introduction-content" name="content" rows="3" maxlength="1000" placeholder="Hi everyone! I'm interested in..." required>{{ draft }}</textarea>
+      <button type="submit" class="btn btn-primary">Publish introduction</button>
+    </form>
+    {% endif %}
+    <div class="mt-3 d-flex flex-wrap gap-3">
+      <a href="{{ url_for('practice') }}">Try the private practice area first</a>
+      <a href="{{ url_for('feed') }}">Skip and browse posts</a>
+    </div>
+  </div></div>
+  <h2 class="h4">Recent introductions</h2>
+  <p class="text-muted">A friendly reply or a question about a shared interest is a good way to say hello.</p>
+  {% for entry in entries %}
+  <article class="card mb-3"><div class="card-body">
+    <div class="d-flex justify-content-between flex-wrap gap-2">
+      <h3 class="h5"><a href="{{ url_for('user_profile', username=entry.username) }}">{{ user_display(entry.username) }}</a></h3>
+      <span class="badge bg-info text-dark align-self-start">Introduction</span>
+    </div>
+    <p style="white-space: pre-wrap; overflow-wrap: anywhere;">{{ entry.content }}</p>
+    <a class="btn btn-light" href="{{ url_for('post_detail', post_id=entry.id, _anchor='comments') }}">{{ 'View conversation' if entry.user_id == session.get('user_id') else 'Say hello' }}</a>
+    <span class="small text-muted ms-2">{{ entry.reply_count }} {{ 'reply' if entry.reply_count == 1 else 'replies' }}</span>
+  </div></article>
+  {% else %}<p>No introductions yet. Yours can start the conversation.</p>{% endfor %}
+</div>
+{% endblock %}

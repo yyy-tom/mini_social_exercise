@@ -7,7 +7,7 @@
     <div class="card-body">
       <div class="d-flex justify-content-between align-items-center">
         <h3 class="card-title mb-0">
-          <a href="/u/{{ post.user_id }}">{{ user_display(post.username) }}</a>
+          <a href="/u/{{ post.username }}">{{ user_display(post.username) }}</a>
         </h3>
         {% if session.get('user_id') == post.user_id %}
         <div class="d-flex align-items-center">
@@ -23,7 +23,8 @@
         {% endif %}
       </div>
       
-      <p class="card-text mt-2">{{ post.content }}</p>
+      {% if post.is_introduction %}<p class="mt-3 mb-1"><span class="badge bg-info text-dark">Introduction</span> Welcome this member with a friendly reply.</p>{% endif %}
+      <p class="card-text mt-2" style="overflow-wrap: anywhere;">{{ post.content }}</p>
 
       <!-- Reactions Display and Add Reaction Button (Copied from feed.html.j2) -->
       <div class="d-flex align-items-center mt-2 mb-2">
@@ -66,7 +67,7 @@
       <hr>
 
       <!-- Comments Section -->
-      <div class="d-flex justify-content-between align-items-center mb-2">
+      <div class="d-flex justify-content-between align-items-center mb-2" id="comments">
           {% if comments %}
             <h4 class="mb-0">Comments ({{ comments | count }})</h4>
           {% else %}
